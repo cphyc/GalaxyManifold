@@ -1,5 +1,12 @@
 import os
 from galaxy_mnist import GalaxyMNIST
+#from astroaugmentations.datasets.galaxy_mnist import GalaxyMNIST
+import numpy as np
+from torchsummary import summary
+
+import albumentations as A
+import astroaugmentations as AA
+from albumentations.pytorch import ToTensorV2
 
 import torch
 from torch import optim, nn, utils, Tensor
@@ -8,7 +15,8 @@ from torchmetrics.functional import accuracy
 from torch.utils.data import random_split, DataLoader
 
 import pytorch_lightning as pl
-from pl_bolts.models.autoencoders.base_vae import VAE
+#from pl_bolts.models.autoencoders.base_vae import VAE
+from models import VAE
 from pytorch_lightning.loggers import WandbLogger
 import wandb
 
@@ -20,7 +28,9 @@ class DataModule(pl.LightningDataModule):
         self.data_dir = self.config['data_dir']
         self.batch_size = self.config['batch_size']
         self.data_size = self.config['data_size']
-        self.no_transform = A.ToFloat()
+        if transform is None:
+            self.transform = lambda x:torch.tensor(np.asarray(x)).permute(2, 0, 1).double()
+            self.no_transform = lambda x:torch.tensor(np.asarray(x)).permute(2, 0, 1).double()
 
     def prepare_data(self):
         # download
@@ -30,7 +40,7 @@ class DataModule(pl.LightningDataModule):
     def setup(self, stage = None):
         # Assign train/val datasets for use in dataloaders
         if stage == "fit" or stage is None:
-            gmnist = GalaxyMNIST(self.data_dir, train=True, transform=self.no_transform)
+            gmnist = GalaxyMNIST(self.data_dir, train=True, transform=self.transform)
             train_size = int(7000*self.data_size) # 8000 total in original train set
             self.gmnist_train, self.gmnist_val = random_split(gmnist, [train_size, 8000-train_size]) # Random validation split?
             #self.gmnist_train = gmnist
@@ -108,34 +118,29 @@ class Classifier(pl.LightningModule):
 def main():
     wandb.init()
 
-    ### Eventually Grid search over latent_dim
-    latent_dim = 20
+    # Set Transformations
+    transform = lambda x:x
 
-    # Model architecture
-    if wandb.config['model']=='resnet50': ### This will need to be changed.
-        model = models.resnet50()
-        model.fc = nn.Linear(
-            in_features=model.fc.in_features,
-            out_features=wandb.config["num_classes"],
-            bias=True
-        )
-    else:
-        raise NotImplementedError
+    ### Eventually Grid search over latent_dim
+    #latent_dim = 20
+
 
     # Configure architecture.
     # https://github.com/Lightning-AI/lightning-bolts/blob/master/pl_bolts/models/autoencoders/basic_vae/basic_vae_module.py
     vae = VAE(
-        input_height=64,
-        enc_type: str = "resnet50",
-        enc_out_dim: int = 2048,
-        kl_coeff: float = 0.1, # coefficient for kl term of the loss
-        latent_dim: int = 256,
-        lr: float = 1e-4,
+        input_height=64,#wandb.config["batch_size"],
+        enc_type = "resnet18",
+        enc_out_dim = 512,
+        kl_coeff = 0.1, # coefficient for kl term of the loss
+        latent_dim = 256,
+        lr = 1e-4,
         #config=wandb.config
     )
+    print(summary(vae, (3,64,64)))
     # Initialise logger
     wandb_logger = WandbLogger(project=wandb.config['project'], job_type='train')
     # Setup trainer
+    print("Arrived Chkpt4")
     trainer = pl.Trainer(
         limit_train_batches=None, max_epochs=wandb.config['epochs'],
         logger=wandb_logger,
@@ -146,7 +151,7 @@ def main():
         ],
         # I think I am double logging as wandb is logging the model weights as well?
         enable_checkpointing = pl.callbacks.ModelCheckpoint(
-            monitor='val/loss',
+            monitor='loss',
             dirpath='./checkpoints',
             filename='vae_galaxyMNIST-epoch{epoch:02d}-val_loss{val/loss:.2f}',
             auto_insert_metric_name=False,
@@ -157,14 +162,13 @@ def main():
     # Fit
     trainer.fit(
         model=vae.double(),
-        train_dataloaders=DataModule(transform=transform, config=wandb.config)
+        train_dataloaders=DataModule(transform=None, config=wandb.config)
     )
     # Test after fitting
     trainer.test(
-        dataloaders=DataModule(transform=transform, config=wandb.config),
+        dataloaders=DataModule(transform=None, config=wandb.config),
         ckpt_path="best"
     )
-
 
 if __name__=="__main__":
     main()

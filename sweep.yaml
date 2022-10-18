@@ -13,7 +13,7 @@ parameters:
   learning_rate:
     value: 1e-4
   batch_size:
-    value: 256
+    value: 128
   transform:
     # See example in: https://docs.wandb.ai/ref/python/sweep
     distribution: categorical
@@ -22,6 +22,10 @@ parameters:
       - computer_vision
       #- gently_engineered # No elastic transforms, missing data or real data.
       #- engineered
+  #latent_dim:
+  #  distribution: categorical
+  #  values:
+  #    N_0 ...  N_x
   data_size:
     distribution: categorical
     values: # Evenly spaced in log space, but must be categorical for grid search
