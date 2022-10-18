@@ -1,0 +1,50 @@
+program: train.py
+project: VAE_GalaxyMNIST_galahad
+method: grid
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - ${args}
+metric:
+  name: loss
+  goal: minimize
+parameters:
+  learning_rate:
+    value: 1e-4
+  batch_size:
+    value: 256
+  transform:
+    # See example in: https://docs.wandb.ai/ref/python/sweep
+    distribution: categorical
+    values:
+      - None
+      - computer_vision
+      #- gently_engineered # No elastic transforms, missing data or real data.
+      #- engineered
+  data_size:
+    distribution: categorical
+    values: # Evenly spaced in log space, but must be categorical for grid search
+      #- 0.01
+      #- 0.0316228 # 10e-1.5
+      #- 0.1
+      #- 0.316228 # 10e-0.5
+      - 1
+  model:
+    value: base_vae
+#    distribution: categorical
+#    values:
+#      - resnet50
+#      - vit_b_32
+#      - inception_v3
+#      - convnext_large
+  num_classes:
+    value: 4
+  data_dir:
+    value: ./data
+  num_workers:
+    value: 6
+  epochs:
+    value: 1000
+  project:
+    value: VAE_GalaxyMNIST_galahad
